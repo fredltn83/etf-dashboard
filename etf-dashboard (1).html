@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard ETF — Screener Pays & Régions</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#0a0a14; color:#fff; font-family:'DM Sans',system-ui,sans-serif; min-height:100vh; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .header { background:linear-gradient(135deg,#0f0f23 0%,#1a1a35 50%,#0d1117 100%); border-bottom:1px solid rgba(255,255,255,0.06); padding:24px 28px 18px; }
+  .header-row { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; }
+  .subtitle { font-size:10px; letter-spacing:3px; color:rgba(255,255,255,0.3); font-weight:700; text-transform:uppercase; margin-bottom:4px; }
+  h1 { font-size:26px; font-weight:800; background:linear-gradient(135deg,#fff 0%,#94a3b8 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+
+  .status { display:flex; align-items:center; gap:6px; padding:6px 14px; border-radius:20px; font-size:11px; font-weight:600; }
+  .status.live { background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.25); color:#22c55e; }
+  .status.off { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); color:rgba(255,255,255,0.4); }
+  .status-dot { width:8px; height:8px; border-radius:50%; }
+  .status.live .status-dot { background:#22c55e; box-shadow:0 0 8px #22c55e66; animation:pulse 2s infinite; }
+  .status.off .status-dot { background:#6b7280; }
+
+  .btn { padding:7px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.1); background:transparent; color:rgba(255,255,255,0.6); cursor:pointer; font-size:12px; font-weight:600; font-family:inherit; transition:all 0.2s; }
+  .btn.active { background:rgba(37,99,235,0.2); color:#60a5fa; }
+  .tabs { display:flex; gap:3px; background:rgba(255,255,255,0.04); border-radius:10px; padding:3px; }
+  .tab { padding:7px 14px; border-radius:8px; border:none; cursor:pointer; font-size:12px; font-weight:600; font-family:inherit; background:transparent; color:rgba(255,255,255,0.4); transition:all 0.2s; }
+  .tab.active { background:rgba(255,255,255,0.12); color:#fff; }
+
+  .import-panel { margin-top:16px; padding:20px; border-radius:14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); display:none; }
+  .import-panel.show { display:block; }
+  .import-row { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+  .file-btn { flex:1 1 220px; padding:24px; border-radius:14px; border:2px dashed rgba(37,99,235,0.4); background:rgba(37,99,235,0.06); color:#fff; cursor:pointer; text-align:center; }
+  .file-btn:hover { background:rgba(37,99,235,0.12); }
+  .paste-col { flex:1 1 300px; display:flex; flex-direction:column; }
+  .paste-col textarea { flex:1; min-height:80px; padding:12px; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:rgba(0,0,0,0.3); color:#fff; font-size:12px; font-family:monospace; outline:none; resize:vertical; }
+  .load-btn { margin-top:8px; padding:8px 18px; border-radius:8px; border:none; background:#2563eb; color:#fff; cursor:pointer; font-size:13px; font-weight:700; font-family:inherit; }
+  .load-btn:disabled { background:#334155; cursor:default; }
+  .help-box { font-size:11px; color:rgba(255,255,255,0.35); line-height:1.7; padding:12px 14px; border-radius:10px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); }
+  .msg { margin-top:12px; padding:10px 14px; border-radius:8px; font-size:12px; }
+  .msg.success { background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.2); color:#22c55e; }
+  .msg.error { background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2); color:#ef4444; }
+
+  .pills { display:flex; gap:6px; margin-top:14px; flex-wrap:wrap; }
+  .pill { padding:6px 14px; border-radius:20px; border:1px solid rgba(255,255,255,0.12); background:transparent; color:rgba(255,255,255,0.5); cursor:pointer; font-size:12px; font-weight:600; font-family:inherit; transition:all 0.2s; }
+  .pill.active { border:none; background:rgba(255,255,255,0.15); color:#fff; box-shadow:0 2px 12px rgba(0,0,0,0.3); }
+
+  .content { padding:20px 28px 40px; }
+  .stats { display:flex; gap:12px; margin-bottom:22px; flex-wrap:wrap; }
+  .stat { background:rgba(255,255,255,0.04); border-radius:14px; padding:18px 20px; border:1px solid rgba(255,255,255,0.06); flex:1; min-width:155px; }
+  .stat-label { font-size:10px; color:rgba(255,255,255,0.4); text-transform:uppercase; letter-spacing:1.2px; font-weight:700; margin-bottom:8px; }
+  .stat-value { font-size:22px; font-weight:800; font-family:monospace; }
+  .stat-sub { font-size:12px; color:rgba(255,255,255,0.45); margin-top:4px; }
+
+  .table-wrap { overflow-x:auto; border-radius:14px; border:1px solid rgba(255,255,255,0.06); background:rgba(255,255,255,0.02); }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { padding:11px 12px; text-align:left; font-size:10px; font-weight:700; color:rgba(255,255,255,0.4); text-transform:uppercase; letter-spacing:0.8px; cursor:pointer; user-select:none; white-space:nowrap; }
+  th.sorted { background:rgba(255,255,255,0.03); }
+  td { padding:9px 12px; }
+  tr { border-bottom:1px solid rgba(255,255,255,0.04); transition:background 0.15s; }
+  tr:hover { background:rgba(255,255,255,0.04); }
+  tr:nth-child(even) { background:rgba(255,255,255,0.015); }
+  tr:nth-child(even):hover { background:rgba(255,255,255,0.04); }
+
+  .etf-name { font-weight:700; font-size:13px; }
+  .etf-sym { font-size:10px; color:rgba(255,255,255,0.3); font-family:monospace; margin-top:1px; }
+  .cat-bar { width:4px; height:28px; border-radius:2px; flex-shrink:0; }
+  .signal { display:inline-block; width:10px; height:10px; border-radius:50%; }
+  .signal.up { background:#22c55e; box-shadow:0 0 8px #22c55e44; }
+  .signal.down { background:#ef4444; box-shadow:0 0 8px #ef444444; }
+  .perf { font-weight:600; font-family:monospace; font-size:12px; }
+
+  .bar-wrap { display:flex; align-items:center; gap:6px; width:100%; }
+  .bar-bg { flex:1; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden; position:relative; }
+  .bar-fill { height:100%; border-radius:3px; transition:width 0.4s; }
+  .bar-val { font-size:11px; font-weight:600; min-width:52px; text-align:right; font-family:monospace; }
+
+  .sort-row { margin-top:18px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .sort-label { font-size:10px; color:rgba(255,255,255,0.3); font-weight:700; text-transform:uppercase; letter-spacing:1px; margin-right:8px; }
+  .footer { margin-top:28px; font-size:11px; color:rgba(255,255,255,0.2); text-align:center; }
+
+  .drag-overlay { position:fixed; inset:0; z-index:9999; background:rgba(37,99,235,0.15); border:4px dashed #2563eb; display:none; align-items:center; justify-content:center; backdrop-filter:blur(4px); }
+  .drag-overlay.show { display:flex; }
+  .drag-box { background:#1a1a35; border-radius:20px; padding:40px 60px; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.5); }
+
+  .chart-container { background:rgba(255,255,255,0.02); border-radius:14px; border:1px solid rgba(255,255,255,0.06); padding:24px 20px; }
+  .chart-title { font-size:15px; font-weight:700; margin-bottom:16px; }
+  canvas { width:100%!important; }
+</style>
+</head>
+<body>
+
+<div class="drag-overlay" id="dragOverlay">
+  <div class="drag-box">
+    <div style="font-size:48px;margin-bottom:12px">📂</div>
+    <div style="font-size:20px;font-weight:700">Dépose ton fichier CSV ici</div>
+    <div style="font-size:13px;color:rgba(255,255,255,0.4);margin-top:6px">Le dashboard se mettra à jour instantanément</div>
+  </div>
+</div>
+
+<div class="header">
+  <div class="header-row">
+    <div>
+      <div class="subtitle">Screener Pays & Régions</div>
+      <h1>Tableau de Bord ETF</h1>
+    </div>
+    <div class="controls">
+      <div class="status off" id="statusBadge">
+        <div class="status-dot"></div>
+        <span id="statusText">PAR DÉFAUT</span>
+      </div>
+      <button class="btn" id="importBtn" onclick="toggleImport()">📥 Importer</button>
+      <div class="tabs">
+        <button class="tab active" data-view="table" onclick="setView('table',this)">📊 Tableau</button>
+        <button class="tab" data-view="bars" onclick="setView('bars',this)">📉 Drawdown</button>
+        <button class="tab" data-view="scatter" onclick="setView('scatter',this)">🎯 Scatter</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="import-panel" id="importPanel">
+    <div style="font-size:14px;font-weight:700;margin-bottom:14px;color:rgba(255,255,255,0.85)">📥 Mettre à jour les données</div>
+    <div class="import-row">
+      <input type="file" id="fileInput" accept=".csv,.tsv,.txt" style="display:none" onchange="handleFileSelect(event)">
+      <div class="file-btn" onclick="document.getElementById('fileInput').click()">
+        <div style="font-size:36px;margin-bottom:8px">📂</div>
+        <div style="font-size:14px;font-weight:700">Choisir un fichier CSV</div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:6px">ou glisse-dépose n'importe où sur la page</div>
+      </div>
+      <div class="paste-col">
+        <div style="font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);margin-bottom:6px">Ou colle le contenu CSV :</div>
+        <textarea id="pasteArea" placeholder="Ouvre ton Google Sheet → Ctrl+A → Ctrl+C → colle ici"></textarea>
+        <button class="load-btn" onclick="loadFromPaste()">🔄 Charger les données collées</button>
+      </div>
+    </div>
+    <div class="help-box">
+      <strong style="color:rgba(255,255,255,0.6)">Comment faire :</strong><br>
+      <strong>Option A</strong> — Fichier CSV : Google Sheet → <b>Fichier</b> → <b>Télécharger</b> → <b>.csv</b> → glisse le fichier ici<br>
+      <strong>Option B</strong> — Copier/coller : Google Sheet → <b>Ctrl+A</b> → <b>Ctrl+C</b> → coller dans la zone texte → cliquer "Charger"
+    </div>
+    <div id="importMsg"></div>
+    <div id="lastUpdate" style="margin-top:8px;font-size:11px;color:rgba(255,255,255,0.3)"></div>
+  </div>
+
+  <div class="pills" id="categoryPills"></div>
+</div>
+
+<div class="content">
+  <div class="stats" id="statsRow"></div>
+  <div id="viewTable"></div>
+  <div id="viewBars" style="display:none"></div>
+  <div id="viewScatter" style="display:none"></div>
+  <div class="sort-row" id="sortRow"></div>
+  <div class="footer" id="footer"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+/* ───── STATE ───── */
+let DATA = [];
+let currentCat = "Tous";
+let sortKey = "drawdown";
+let sortDir = "asc";
+let currentView = "table";
+let isLive = false;
+let barChart = null;
+let scatterChart = null;
+
+const CATEGORIES = ["Tous","Europe","US","Asie & EM","Amériques","Secteur","Matières 1ères","Global"];
+const CAT_COLORS = {"Europe":"#2563eb","US":"#dc2626","Asie & EM":"#f59e0b","Amériques":"#10b981","Secteur":"#8b5cf6","Matières 1ères":"#d97706","Global":"#6b7280","Autre":"#475569"};
+const SORT_FIELDS = [
+  {key:"nom",label:"Nom"},{key:"drawdown",label:"Drawdown"},{key:"ytd",label:"YTD"},
+  {key:"perf5a",label:"5 ans"},{key:"perf1m",label:"1 mois"},{key:"perf5j",label:"5 jours"},
+  {key:"perfJanv",label:"Janv."},{key:"distWma21",label:"WMA21"},{key:"perfVeille",label:"Veille"},{key:"pctPlusHaut",label:"% Haut"},
+];
+
+const CATEGORY_MAP = {
+  "pologne":"Europe","italie":"Europe","dax":"Europe","pays bas":"Europe","pays-bas":"Europe",
+  "espagne":"Europe","suisse":"Europe","ftse 100":"Europe","cac 40":"Europe","suede":"Europe","suède":"Europe",
+  "grece":"Europe","grèce":"Europe","belgique":"Europe","stoxx600":"Europe","stoxx 600":"Europe",
+  "euro50":"Europe","euro 50":"Europe",
+  "semi condu":"Secteur","semi-conducteurs":"Secteur","defense eu":"Secteur","défense eu":"Secteur",
+  "bank":"Secteur","banques":"Secteur","cons staples":"Secteur","health":"Secteur","santé":"Secteur",
+  "health europe":"Secteur","santé europe":"Secteur","small europe":"Secteur","small cap eu":"Secteur",
+  "tdiv":"Secteur","top dividende":"Secteur","guard":"Secteur",
+  "gold":"Matières 1ères","or":"Matières 1ères","silver":"Matières 1ères","argent":"Matières 1ères",
+  "bnp metal":"Matières 1ères","métaux":"Matières 1ères","commodities":"Matières 1ères","uranium":"Matières 1ères",
+  "msci world":"Global","ftse all world":"Global",
+  "nasdaq100":"US","nasdaq 100":"US","sp500":"US","s&p 500":"US","sp5":"US",
+  "ex china":"Asie & EM","china":"Asie & EM","chine":"Asie & EM","taiwan":"Asie & EM","taïwan":"Asie & EM",
+  "coree du sud":"Asie & EM","corée du sud":"Asie & EM","japon":"Asie & EM","emergent":"Asie & EM",
+  "emergents":"Asie & EM","china tech":"Asie & EM","india":"Asie & EM","inde":"Asie & EM",
+  "canada":"Amériques","am latine":"Amériques","am. latine":"Amériques",
+};
+
+const FALLBACK = [
+  {symbole:"LON:SPOL",nom:"Pologne",categorie:"Europe",prix:2584,perf5a:87.35,ytd:69.97,drawdown:-2.56,distWma21:-0.69,tendance:"baissier",pctPlusHaut:-2.71,perf1m:3.22,perf5j:-2.56,perfJanv:2.50,perfVeille:0.12},
+  {symbole:"EPA:ETFMIB",nom:"Italie",categorie:"Europe",prix:45.58,perf5a:71.48,ytd:34.65,drawdown:-2.52,distWma21:-1.01,tendance:"baissier",pctPlusHaut:-3.08,perf1m:0.09,perf5j:-2.52,perfJanv:0.89,perfVeille:0.36},
+  {symbole:"AMS:EXS1",nom:"Dax",categorie:"Europe",prix:206.1,perf5a:52.89,ytd:23.89,drawdown:-2.11,distWma21:0.44,tendance:"haussier",pctPlusHaut:-2.41,perf1m:-1.60,perf5j:-0.41,perfJanv:1.50,perfVeille:0.00},
+  {symbole:"AMS:IAEX",nom:"Pays-Bas",categorie:"Europe",prix:99.51,perf5a:24.65,ytd:13.52,drawdown:-1.24,distWma21:-0.29,tendance:"haussier",pctPlusHaut:-1.94,perf1m:-1.12,perf5j:-0.14,perfJanv:3.06,perfVeille:0.33},
+  {symbole:"EPA:CS1",nom:"Espagne",categorie:"Europe",prix:452.25,perf5a:139.03,ytd:59.64,drawdown:-1.90,distWma21:-1.16,tendance:"baissier",pctPlusHaut:-2.55,perf1m:0.56,perf5j:-1.90,perfJanv:2.16,perfVeille:0.72},
+  {symbole:"EPA:CSWC",nom:"Suisse",categorie:"Europe",prix:12.35,perf5a:9.58,ytd:19.55,drawdown:0.00,distWma21:1.39,tendance:"haussier",pctPlusHaut:0.00,perf1m:1.06,perf5j:0.57,perfJanv:2.66,perfVeille:0.02},
+  {symbole:"LON:L100",nom:"FTSE 100",categorie:"Europe",prix:1874.8,perf5a:62.76,ytd:32.69,drawdown:-0.07,distWma21:1.15,tendance:"haussier",pctPlusHaut:-0.77,perf1m:2.24,perf5j:0.74,perfJanv:5.07,perfVeille:0.16},
+  {symbole:"EPA:C40",nom:"CAC 40",categorie:"Europe",prix:144.2,perf5a:30.69,ytd:14.68,drawdown:-2.13,distWma21:0.28,tendance:"baissier",pctPlusHaut:-2.44,perf1m:-0.57,perf5j:-0.72,perfJanv:-0.08,perfVeille:-0.04},
+  {symbole:"LON:OMXS",nom:"Suède",categorie:"Europe",prix:843,perf5a:23.25,ytd:36.80,drawdown:-1.17,distWma21:1.04,tendance:"haussier",pctPlusHaut:-1.60,perf1m:3.06,perf5j:-0.09,perfJanv:8.35,perfVeille:0.10},
+  {symbole:"NYSEARCA:GREK",nom:"Grèce",categorie:"Europe",prix:71.9,perf5a:174.53,ytd:85.36,drawdown:-6.87,distWma21:-3.11,tendance:"baissier",pctPlusHaut:-6.87,perf1m:2.67,perf5j:-3.84,perfJanv:6.61,perfVeille:-2.51},
+  {symbole:"NYSEARCA:EWK",nom:"Belgique",categorie:"Europe",prix:27.34,perf5a:28.00,ytd:49.48,drawdown:-0.04,distWma21:2.73,tendance:"haussier",pctPlusHaut:-0.98,perf1m:7.94,perf5j:1.33,perfJanv:11.77,perfVeille:-0.36},
+  {symbole:"EPA:MEUD",nom:"Stoxx 600",categorie:"Europe",prix:298.85,perf5a:42.16,ytd:25.33,drawdown:-0.31,distWma21:0.38,tendance:"haussier",pctPlusHaut:-0.96,perf1m:0.93,perf5j:-0.23,perfJanv:4.01,perfVeille:0.32},
+  {symbole:"LON:EUN",nom:"Euro 50",categorie:"Europe",prix:4582.5,perf5a:40.17,ytd:25.96,drawdown:0.17,distWma21:0.96,tendance:"haussier",pctPlusHaut:-0.92,perf1m:1.29,perf5j:0.21,perfJanv:4.14,perfVeille:0.25},
+  {symbole:"EPA:CHIP",nom:"Semi-conducteurs",categorie:"Secteur",prix:78.16,perf5a:177.36,ytd:45.25,drawdown:-1.23,distWma21:0.97,tendance:"haussier",pctPlusHaut:-2.67,perf1m:0.83,perf5j:-0.10,perfJanv:7.55,perfVeille:0.37},
+  {symbole:"EPA:GUARD",nom:"Défense EU",categorie:"Secteur",prix:11.67,perf5a:null,ytd:8.96,drawdown:-6.11,distWma21:0.50,tendance:"haussier",pctPlusHaut:-7.53,perf1m:-5.96,perf5j:-1.85,perfJanv:5.80,perfVeille:-0.97},
+  {symbole:"EPA:BNK",nom:"Banques",categorie:"Secteur",prix:60.51,perf5a:203.16,ytd:31.83,drawdown:-6.72,distWma21:-4.80,tendance:"baissier",pctPlusHaut:-7.08,perf1m:-2.31,perf5j:-5.05,perfJanv:-0.33,perfVeille:1.75},
+  {symbole:"LON:XDWS",nom:"Cons. Staples",categorie:"Secteur",prix:58.38,perf5a:26.09,ytd:10.86,drawdown:-0.19,distWma21:4.43,tendance:"haussier",pctPlusHaut:-0.44,perf1m:10.36,perf5j:2.47,perfJanv:13.65,perfVeille:-0.19},
+  {symbole:"LON:XDWH",nom:"Santé",categorie:"Secteur",prix:60.39,perf5a:16.83,ytd:18.53,drawdown:-0.41,distWma21:1.57,tendance:"haussier",pctPlusHaut:-0.90,perf1m:1.56,perf5j:0.99,perfJanv:3.11,perfVeille:-0.41},
+  {symbole:"LON:ESIH",nom:"Santé Europe",categorie:"Secteur",prix:6.59,perf5a:27.71,ytd:20.26,drawdown:-0.30,distWma21:2.28,tendance:"haussier",pctPlusHaut:-0.60,perf1m:2.01,perf5j:2.17,perfJanv:6.81,perfVeille:-0.34},
+  {symbole:"LON:XXSC",nom:"Small Cap EU",categorie:"Secteur",prix:6181,perf5a:16.82,ytd:27.50,drawdown:-1.19,distWma21:0.26,tendance:"baissier",pctPlusHaut:-1.40,perf1m:1.01,perf5j:-0.63,perfJanv:4.02,perfVeille:0.16},
+  {symbole:"EPA:TDIV",nom:"Top Dividende",categorie:"Secteur",prix:51.76,perf5a:29.24,ytd:29.14,drawdown:-0.60,distWma21:2.21,tendance:"haussier",pctPlusHaut:-0.86,perf1m:5.18,perf5j:0.76,perfJanv:7.36,perfVeille:-0.56},
+  {symbole:"NYSEARCA:GLD",nom:"Or",categorie:"Matières 1ères",prix:462.62,perf5a:172.45,ytd:91.06,drawdown:-6.71,distWma21:0.89,tendance:"haussier",pctPlusHaut:-10.03,perf1m:9.81,perf5j:-0.94,perfJanv:16.15,perfVeille:2.49},
+  {symbole:"NYSEARCA:SLV",nom:"Argent",categorie:"Matières 1ères",prix:69.72,perf5a:226.71,ytd:164.79,drawdown:-33.98,distWma21:-11.30,tendance:"baissier",pctPlusHaut:-36.51,perf1m:-13.95,perf5j:-8.31,perfJanv:6.04,perfVeille:2.94},
+  {symbole:"EPA:EMEH",nom:"Métaux (BNP)",categorie:"Matières 1ères",prix:14.5,perf5a:37.96,ytd:33.27,drawdown:-7.35,distWma21:-1.76,tendance:"baissier",pctPlusHaut:-9.71,perf1m:3.35,perf5j:-1.63,perfJanv:8.37,perfVeille:0.00},
+  {symbole:"LON:ICOM",nom:"Commodities",categorie:"Matières 1ères",prix:8.52,perf5a:36.32,ytd:23.84,drawdown:-5.54,distWma21:-1.18,tendance:"baissier",pctPlusHaut:-7.99,perf1m:3.02,perf5j:-1.62,perfJanv:7.04,perfVeille:-0.44},
+  {symbole:"NYSEARCA:URA",nom:"Uranium",categorie:"Matières 1ères",prix:51.91,perf5a:131.12,ytd:93.84,drawdown:-16.02,distWma21:-4.01,tendance:"baissier",pctPlusHaut:-17.13,perf1m:-4.58,perf5j:-5.45,perfJanv:12.70,perfVeille:0.31},
+  {symbole:"AMS:IWDA",nom:"MSCI World",categorie:"Global",prix:112.33,perf5a:41.60,ytd:7.84,drawdown:-2.26,distWma21:-0.32,tendance:"baissier",pctPlusHaut:-2.40,perf1m:-2.13,perf5j:-0.79,perfJanv:0.89,perfVeille:0.05},
+  {symbole:"EPA:ANX",nom:"Nasdaq 100",categorie:"US",prix:238.97,perf5a:46.12,ytd:2.52,drawdown:-7.09,distWma21:-1.99,tendance:"baissier",pctPlusHaut:-7.84,perf1m:-5.15,perf5j:-1.62,perfJanv:-2.70,perfVeille:0.13},
+  {symbole:"EPA:SP5",nom:"S&P 500",categorie:"US",prix:59.26,perf5a:36.70,ytd:1.63,drawdown:-3.72,distWma21:-0.98,tendance:"baissier",pctPlusHaut:-3.92,perf1m:-3.53,perf5j:-1.30,perfJanv:-0.82,perfVeille:0.00},
+  {symbole:"LON:VWRD",nom:"FTSE All World",categorie:"Global",prix:171.35,perf5a:37.77,ytd:24.04,drawdown:-0.98,distWma21:0.08,tendance:"baissier",pctPlusHaut:-4.66,perf1m:0.98,perf5j:-0.65,perfJanv:2.96,perfVeille:0.11},
+  {symbole:"AMS:EXCH",nom:"EM ex-China",categorie:"Asie & EM",prix:8.01,perf5a:56.14,ytd:56.45,drawdown:0.25,distWma21:2.79,tendance:"haussier",pctPlusHaut:-1.48,perf1m:8.83,perf5j:2.04,perfJanv:13.62,perfVeille:0.36},
+  {symbole:"TSE:XCH",nom:"Chine",categorie:"Asie & EM",prix:24.78,perf5a:10.23,ytd:19.08,drawdown:-10.54,distWma21:-2.19,tendance:"baissier",pctPlusHaut:-10.93,perf1m:-4.58,perf5j:-2.21,perfJanv:-4.51,perfVeille:-0.72},
+  {symbole:"EWT",nom:"Taïwan",categorie:"Asie & EM",prix:73.05,perf5a:9.45,ytd:41.13,drawdown:-0.41,distWma21:3.77,tendance:"haussier",pctPlusHaut:-1.12,perf1m:8.48,perf5j:3.24,perfJanv:12.78,perfVeille:0.68},
+  {symbole:"LON:FLRK",nom:"Corée du Sud",categorie:"Asie & EM",prix:53.56,perf5a:82.74,ytd:148.77,drawdown:2.31,distWma21:6.58,tendance:"haussier",pctPlusHaut:-0.35,perf1m:18.97,perf5j:7.66,perfJanv:32.57,perfVeille:2.31},
+  {symbole:"LON:XDJP",nom:"Japon",categorie:"Asie & EM",prix:2824,perf5a:45.75,ytd:36.08,drawdown:-1.84,distWma21:5.24,tendance:"haussier",pctPlusHaut:-2.35,perf1m:7.25,perf5j:2.06,perfJanv:13.60,perfVeille:-1.10},
+  {symbole:"AMS:EMIM",nom:"Emergents",categorie:"Asie & EM",prix:42.43,perf5a:35.08,ytd:29.20,drawdown:0.43,distWma21:1.26,tendance:"haussier",pctPlusHaut:-0.63,perf1m:4.07,perf5j:1.58,perfJanv:8.43,perfVeille:0.96},
+  {symbole:"EPA:CC1",nom:"China Tech",categorie:"Asie & EM",prix:298.27,perf5a:13.91,ytd:27.25,drawdown:-8.44,distWma21:-0.56,tendance:"haussier",pctPlusHaut:-8.74,perf1m:-4.17,perf5j:0.61,perfJanv:0.95,perfVeille:0.00},
+  {symbole:"EPA:PINR",nom:"Inde",categorie:"Asie & EM",prix:24.08,perf5a:11.58,ytd:-13.94,drawdown:-10.35,distWma21:-0.58,tendance:"baissier",pctPlusHaut:-10.75,perf1m:-1.91,perf5j:-1.39,perfJanv:-4.82,perfVeille:0.68},
+  {symbole:"AMS:CSCA",nom:"Canada",categorie:"Amériques",prix:243.81,perf5a:50.47,ytd:24.09,drawdown:-1.15,distWma21:0.71,tendance:"haussier",pctPlusHaut:-2.30,perf1m:-0.86,perf5j:0.43,perfJanv:2.74,perfVeille:0.04},
+  {symbole:"EPA:PALAT",nom:"Am. Latine",categorie:"Amériques",prix:28.26,perf5a:71.90,ytd:60.20,drawdown:-1.29,distWma21:-0.05,tendance:"haussier",pctPlusHaut:-1.88,perf1m:7.99,perf5j:0.36,perfJanv:15.91,perfVeille:1.34},
+];
+
+/* ───── HELPERS ───── */
+function pf(v) { return v==null?"—":`${v>=0?"+":""}${v.toFixed(2)}%`; }
+function pfC(v) { return v==null?"#94a3b8":v>0?"#22c55e":v<0?"#ef4444":"#94a3b8"; }
+function detectCat(nom) { const l=(nom||"").toLowerCase().trim(); for(const[k,v]of Object.entries(CATEGORY_MAP)){if(l===k||l.includes(k))return v;} return "Autre"; }
+function pn(s) { if(s==null||s===""||s==="-"||String(s).includes("#"))return null; const v=parseFloat(String(s).replace(/\s/g,"").replace("%","").replace(",",".")); return isNaN(v)?null:v; }
+
+function parseRow(r) {
+  const sym=(r[0]||"").trim(), nom=(r[1]||"").trim();
+  if(!sym||!nom) return null;
+  return { symbole:sym.toUpperCase(), nom, categorie:detectCat(nom), prix:pn(r[2]), perf5a:pn(r[3]), ytd:pn(r[5]),
+    drawdown:pn(r[7]), distWma21:pn(r[8]),
+    tendance: String(r[14]||"").includes("✅")||String(r[14]||"").toLowerCase().includes("haussier")?"haussier":"baissier",
+    pctPlusHaut:pn(r[16]), perf1m:pn(r[18]), perf5j:pn(r[20]), perfJanv:pn(r[23]), perfVeille:pn(r[26]) };
+}
+
+function loadCSV(text, source) {
+  try {
+    const parsed = Papa.parse(text, {skipEmptyLines:true});
+    const items = parsed.data.slice(1).map(r=>parseRow(r)).filter(Boolean);
+    if(!items.length) { showMsg("error","Aucune donnée valide trouvée."); return; }
+    DATA = items; isLive = true;
+    showMsg("success",`✅ ${items.length} ETFs chargés depuis ${source}`);
+    document.getElementById("lastUpdate").textContent = `Dernière MAJ : ${new Date().toLocaleString("fr-FR")} • ${items.length} ETFs`;
+    render();
+  } catch(e) { showMsg("error","❌ "+e.message); }
+}
+
+function showMsg(type, text) {
+  const el = document.getElementById("importMsg");
+  el.className = "msg "+type; el.textContent = text; el.style.display = "block";
+}
+
+/* ───── EVENTS ───── */
+function toggleImport() {
+  const p = document.getElementById("importPanel");
+  const b = document.getElementById("importBtn");
+  p.classList.toggle("show"); b.classList.toggle("active");
+}
+function handleFileSelect(e) { const f=e.target.files?.[0]; if(f){const r=new FileReader(); r.onload=ev=>loadCSV(ev.target.result,f.name); r.readAsText(f);} }
+function loadFromPaste() { const t=document.getElementById("pasteArea").value.trim(); if(t) loadCSV(t,"collage"); }
+
+// Drag & drop
+document.addEventListener("dragover", e => { e.preventDefault(); document.getElementById("dragOverlay").classList.add("show"); });
+document.addEventListener("dragleave", e => { if(e.relatedTarget===null) document.getElementById("dragOverlay").classList.remove("show"); });
+document.addEventListener("drop", e => { e.preventDefault(); document.getElementById("dragOverlay").classList.remove("show"); const f=e.dataTransfer.files?.[0]; if(f){const r=new FileReader();r.onload=ev=>loadCSV(ev.target.result,f.name);r.readAsText(f);} });
+
+function setView(v, el) {
+  currentView = v;
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  if(el) el.classList.add("active");
+  document.getElementById("viewTable").style.display = v==="table"?"block":"none";
+  document.getElementById("viewBars").style.display = v==="bars"?"block":"none";
+  document.getElementById("viewScatter").style.display = v==="scatter"?"block":"none";
+  if(v==="bars") renderBars();
+  if(v==="scatter") renderScatter();
+}
+
+function setCat(c) { currentCat = c; render(); }
+function doSort(key) {
+  if(sortKey===key) sortDir = sortDir==="asc"?"desc":"asc";
+  else { sortKey=key; sortDir=key==="nom"?"asc":"desc"; }
+  render();
+}
+
+/* ───── RENDER ───── */
+function getFiltered() {
+  let d = currentCat==="Tous" ? DATA : DATA.filter(r=>r.categorie===currentCat);
+  return [...d].sort((a,b) => {
+    const va=a[sortKey]??-9999, vb=b[sortKey]??-9999;
+    if(sortKey==="nom") return sortDir==="asc"?String(va).localeCompare(String(vb)):String(vb).localeCompare(String(va));
+    return sortDir==="asc"?va-vb:vb-va;
+  });
+}
+
+function bar(val, max, color) {
+  const pct = Math.min(Math.abs(val)/max*100,100);
+  const neg = val<0;
+  return `<div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${color};${neg?"position:absolute;right:0;top:0":""}"></div></div><span class="bar-val" style="color:${color}">${pf(val)}</span></div>`;
+}
+
+function render() {
+  const filtered = getFiltered();
+  // Status
+  const badge = document.getElementById("statusBadge");
+  badge.className = isLive?"status live":"status off";
+  document.getElementById("statusText").textContent = isLive?"MIS À JOUR":"PAR DÉFAUT";
+
+  // Categories
+  document.getElementById("categoryPills").innerHTML = CATEGORIES.map(c =>
+    `<button class="pill${currentCat===c?" active":""}" style="${currentCat===c&&c!=="Tous"?"background:"+CAT_COLORS[c]+"88":""}" onclick="setCat('${c}')">${c}</button>`
+  ).join("");
+
+  // Stats
+  const bestMom = [...filtered].sort((a,b)=>(b.perf1m??-999)-(a.perf1m??-999))[0];
+  const worstDD = [...filtered].filter(d=>d.drawdown!=null).sort((a,b)=>a.drawdown-b.drawdown)[0];
+  const bestYTD = [...filtered].sort((a,b)=>(b.ytd??-999)-(a.ytd??-999))[0];
+  const haussier = filtered.filter(d=>d.tendance==="haussier").length;
+  document.getElementById("statsRow").innerHTML = `
+    <div class="stat"><div class="stat-label">Meilleur Momentum 1M</div><div class="stat-value" style="color:#22c55e">${bestMom?pf(bestMom.perf1m):"—"}</div><div class="stat-sub">${bestMom?.nom||""}</div></div>
+    <div class="stat"><div class="stat-label">Pire Drawdown</div><div class="stat-value" style="color:#ef4444">${worstDD?pf(worstDD.drawdown):"—"}</div><div class="stat-sub">${worstDD?.nom||""}</div></div>
+    <div class="stat"><div class="stat-label">Meilleur YTD</div><div class="stat-value" style="color:#3b82f6">${bestYTD?pf(bestYTD.ytd):"—"}</div><div class="stat-sub">${bestYTD?.nom||""}</div></div>
+    <div class="stat"><div class="stat-label">Tendance</div><div class="stat-value" style="color:#f59e0b">${haussier}/${filtered.length}</div><div class="stat-sub">haussiers</div></div>`;
+
+  // Table
+  const cols = [{key:"nom",label:"ETF"},{key:"tendance",label:""},{key:"drawdown",label:"Drawdown"},{key:"distWma21",label:"WMA21"},{key:"perf5j",label:"5J"},{key:"perf1m",label:"1M"},{key:"perfJanv",label:"Janv."},{key:"ytd",label:"YTD"},{key:"perfVeille",label:"Veille"},{key:"pctPlusHaut",label:"% Haut"}];
+  let html = `<div class="table-wrap"><table><thead><tr>`;
+  cols.forEach(c => {
+    html += `<th class="${sortKey===c.key?"sorted":""}" onclick="${c.key!=="tendance"?"doSort('"+c.key+"')":""}">${c.label} ${sortKey===c.key?(sortDir==="asc"?"↑":"↓"):""}</th>`;
+  });
+  html += `</tr></thead><tbody>`;
+  filtered.forEach(d => {
+    const catCol = CAT_COLORS[d.categorie]||"#475569";
+    html += `<tr>
+      <td><div style="display:flex;align-items:center;gap:8px"><span class="cat-bar" style="background:${catCol}"></span><div><div class="etf-name">${d.nom}</div><div class="etf-sym">${d.symbole}</div></div></div></td>
+      <td style="text-align:center"><span class="signal ${d.tendance==="haussier"?"up":"down"}"></span></td>
+      <td>${bar(d.drawdown??0,35,"#ef4444")}</td>
+      <td>${bar(d.distWma21??0,12,d.distWma21>=0?"#22c55e":"#ef4444")}</td>
+      <td><span class="perf" style="color:${pfC(d.perf5j)}">${pf(d.perf5j)}</span></td>
+      <td><span class="perf" style="color:${pfC(d.perf1m)}">${pf(d.perf1m)}</span></td>
+      <td><span class="perf" style="color:${pfC(d.perfJanv)}">${pf(d.perfJanv)}</span></td>
+      <td><span class="perf" style="color:${pfC(d.ytd)}">${pf(d.ytd)}</span></td>
+      <td><span class="perf" style="color:${pfC(d.perfVeille)}">${pf(d.perfVeille)}</span></td>
+      <td>${bar(d.pctPlusHaut??0,37,"#f59e0b")}</td>
+    </tr>`;
+  });
+  html += `</tbody></table></div>`;
+  document.getElementById("viewTable").innerHTML = html;
+
+  // Sort row
+  document.getElementById("sortRow").innerHTML = `<span class="sort-label">Trier :</span>` +
+    SORT_FIELDS.map(f => `<button class="pill${sortKey===f.key?" active":""}" onclick="doSort('${f.key}')">${f.label}${sortKey===f.key?(sortDir==="asc"?" ↑":" ↓"):""}</button>`).join("");
+
+  document.getElementById("footer").textContent = `${filtered.length} ETFs • ${isLive?"🟢 Données importées":"⚪ Données par défaut"} • Signal = WMA10`;
+
+  if(currentView==="bars") renderBars();
+  if(currentView==="scatter") renderScatter();
+}
+
+function renderBars() {
+  const filtered = getFiltered().sort((a,b)=>(a.drawdown??0)-(b.drawdown??0)).slice(0,25);
+  const container = document.getElementById("viewBars");
+  container.innerHTML = `<div class="chart-container"><div class="chart-title">Drawdown par ETF</div><canvas id="barCanvas" height="${Math.max(400,filtered.length*28)}"></canvas></div>`;
+  if(barChart) barChart.destroy();
+  barChart = new Chart(document.getElementById("barCanvas"), {
+    type:"bar",
+    data: { labels:filtered.map(d=>d.nom), datasets:[{data:filtered.map(d=>d.drawdown??0),
+      backgroundColor:filtered.map(d=>d.drawdown>=0?"#22c55ecc":d.drawdown>-5?"#f59e0bcc":"#ef4444cc"),
+      borderRadius:4, maxBarThickness:18 }] },
+    options: { indexAxis:"y", responsive:true, plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.parsed.x}%`}}},
+      scales:{ x:{ticks:{color:"rgba(255,255,255,0.4)",callback:v=>v+"%"},grid:{color:"rgba(255,255,255,0.06)"}},
+               y:{ticks:{color:"rgba(255,255,255,0.6)"},grid:{display:false}} } }
+  });
+}
+
+function renderScatter() {
+  const filtered = getFiltered().filter(d=>d.ytd!=null&&d.drawdown!=null);
+  const container = document.getElementById("viewScatter");
+  const legend = Object.entries(CAT_COLORS).filter(([k])=>k!=="Autre").map(([k,c])=>`<span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:rgba(255,255,255,0.5)"><span style="width:10px;height:10px;border-radius:50%;background:${c};display:inline-block"></span>${k}</span>`).join("&nbsp;&nbsp;");
+  container.innerHTML = `<div class="chart-container"><div class="chart-title">Drawdown vs YTD</div><div style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:16px">Zone idéale : haut-droite</div><canvas id="scatterCanvas" height="480"></canvas><div style="text-align:center;margin-top:12px">${legend}</div></div>`;
+  if(scatterChart) scatterChart.destroy();
+
+  const datasets = {};
+  filtered.forEach(d => {
+    const cat = d.categorie;
+    if(!datasets[cat]) datasets[cat] = { label:cat, data:[], backgroundColor:CAT_COLORS[cat]||"#6b7280", pointRadius:7, pointHoverRadius:10 };
+    datasets[cat].data.push({ x:d.drawdown, y:d.ytd, label:d.nom });
+  });
+
+  scatterChart = new Chart(document.getElementById("scatterCanvas"), {
+    type:"scatter",
+    data: { datasets:Object.values(datasets) },
+    options: { responsive:true,
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:ctx=>`${ctx.raw.label}: DD ${ctx.raw.x}% / YTD ${ctx.raw.y}%`}} },
+      scales:{ x:{title:{display:true,text:"Drawdown (%)",color:"rgba(255,255,255,0.3)"},ticks:{color:"rgba(255,255,255,0.4)",callback:v=>v+"%"},grid:{color:"rgba(255,255,255,0.06)"}},
+               y:{title:{display:true,text:"YTD (%)",color:"rgba(255,255,255,0.3)"},ticks:{color:"rgba(255,255,255,0.4)",callback:v=>v+"%"},grid:{color:"rgba(255,255,255,0.06)"}} } }
+  });
+}
+
+/* ───── INIT ───── */
+DATA = FALLBACK;
+render();
+</script>
+</body>
+</html>
